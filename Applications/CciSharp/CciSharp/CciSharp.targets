@@ -1,0 +1,135 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="3.5" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <!--=====================================================================
+      Begin CciSharp 
+  ======================================================================-->
+  <!-- 
+  
+  This target hooks the ccs compiler into the build process. 
+  The generator runs on the product after the build is complete. 
+
+  Properties project/configuration level:
+  
+    - CcsPath: path to the ccs.exe seop
+    - CcsRewriting : boolean, turns on the task
+
+  Items project /configuration level:
+  
+    - CcsMutatorAssemblies: list of assemblies containing mutators
+    
+  By default, ccs loads the mutator assemblies from the following folders
+  (mutator assemblies must be named 'CciSharp.....dll'):
+      - $(ProjectDir)\CciSharp\
+      - $(SolutionDir)\CciSharp\
+      - $(CcsMutator) if defined
+-->
+
+  <!--== Multiple Import Guard -->
+  <PropertyGroup>
+    <CcsImported>true</CcsImported>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="$(CcsRewriting) == 'true'">
+    <CcsPath Condition="$(CcsPath) == ''">$(CcsInstallDir)</CcsPath>
+    <CcsTool Condition="$(CcsTool) == ''">Ccs.exe</CcsTool>
+    <CcsCommand>"$(CcsPath)$(CcsTool)"</CcsCommand>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- default locations where mutators are looked up-->
+    <!-- local project subfolder -->
+    <CcsMutatorAssemblies Include="CciSharp\CciSharp.*.dll" />
+    <!-- solution subfolder -->
+    <CcsMutatorAssemblies 
+      Condition="$(SolutionDir) != ''" 
+      Include="$(SolutionDir)CciSharp\CciSharp.*.dll" />
+    <!-- custom user path -->
+    <CcsMutatorAssemblies
+      Condition="$(CcsMutatorDir) != ''"
+      Include="$(CcsMutatorDir)CciSharp.*.dll" />
+  </ItemGroup>
+
+  <PropertyGroup>
+    <CompileDependsOn>$(CompileDependsOn);CcsRewrite</CompileDependsOn>
+  </PropertyGroup>
+  <PropertyGroup>
+    <PrepareForRunDependsOn>$(PrepareForRunDependsOn);CcsRewriteTimestamp</PrepareForRunDependsOn>
+  </PropertyGroup>
+
+  <PropertyGroup>
+    <CcsRewriteDependsOn>CcsPreRewrite</CcsRewriteDependsOn>
+  </PropertyGroup>
+
+  <PropertyGroup>
+    <CcsCommandOptions>$(CcsCommandOptions)</CcsCommandOptions>
+  </PropertyGroup>
+
+  <Target
+    Name="CcsPreRewrite"
+    Condition="$(CcsRewriting) == 'true'">
+  </Target>
+
+  <ItemGroup>
+    <CcsRewriterInputs Include="@(IntermediateAssembly)"/>
+  </ItemGroup>
+  <PropertyGroup>
+    <CcsRewriterOutput>$(IntermediateOutputPath)$(TargetName).ccs</CcsRewriterOutput>
+  </PropertyGroup>
+
+  <Target
+    Name="CcsRewriteTimestamp"
+    Condition="$(CcsRewriting) == 'true' and @(CcsMutatorAssemblies) != ''"
+    Inputs="@(CcsRewriterInputs)"
+    Outputs="$(CcsRewriterOutput)">
+    <Touch Files="$(CcsRewriterOutput)"/>
+  </Target>
+  
+  <Target
+    Name="CcsRewrite"
+    Condition="$(CcsRewriting) == 'true' and @(CcsMutatorAssemblies) != ''"
+    Inputs="@(CcsRewriterInputs)"
+    Outputs="$(CcsRewriterOutput)"
+    DependsOnTargets="$(CcsRewriteDependsOn)">
+    <PropertyGroup>
+      <CcsFileCommandOptions>$(CcsCommandOptions)</CcsFileCommandOptions>
+      <CcsExecCommand>$(CcsCommand) &quot;@(CcsRewriterInputs)&quot; &quot;@(CcsMutatorAssemblies)&quot;</CcsExecCommand>
+    </PropertyGroup>
+    
+    <Exec Command="$(CcsExecCommand)" />
+    <!-- keep a copy of the original -->
+    <Copy
+      Condition="Exists('@(CcsRewriterInputs->'%(RootDir)%(Directory)%(FileName).ccs%(Extension)')')"
+      SourceFiles="@(CcsRewriterInputs)"
+      DestinationFiles="@(CcsRewriterInputs->'%(RootDir)%(Directory)%(FileName).csc%(Extension)')" />
+    <Copy
+      Condition="Exists('@(CcsRewriterInputs->'%(RootDir)%(Directory)%(FileName).ccs%(Extension)')') AND Exists('@(CcsRewriterInputs->'%(RootDir)%(Directory)%(FileName).pdb')')"
+      SourceFiles="@(CcsRewriterInputs->'%(RootDir)%(Directory)%(FileName).pdb')"
+      DestinationFiles="@(CcsRewriterInputs->'%(RootDir)%(Directory)%(FileName).csc.pdb')" />
+    <!-- copy ccs in -->
+    <Copy
+      Condition="Exists('@(CcsRewriterInputs->'%(RootDir)%(Directory)%(FileName).ccs%(Extension)')')"
+      SourceFiles="@(CcsRewriterInputs->'%(RootDir)%(Directory)%(FileName).ccs%(Extension)')"
+      DestinationFiles="@(CcsRewriterInputs)" />
+    <Copy
+      Condition="Exists('@(CcsRewriterInputs->'%(RootDir)%(Directory)%(FileName).pdb')')"
+      SourceFiles="@(CcsRewriterInputs->'%(RootDir)%(Directory)%(FileName).ccs.pdb')"
+      DestinationFiles="@(CcsRewriterInputs->'%(RootDir)%(Directory)%(FileName).pdb')" />
+    <!-- touch files for lazy build -->
+    <WriteLinesToFile File="$(CcsRewriterOutput)"/>
+    <Touch Files="$(CcsRewriterOutput)"/>
+    <ItemGroup>
+      <FileWrites
+         Include="
+           @(CcsRewriterInputs);
+           $(CcsRewriterOutput);
+           $(IntermediateOutputPath)$(TargetName).ccs.*; 
+           $(IntermediateOutputPath)$(TargetName).csc.*
+         "/>
+    </ItemGroup>    
+  </Target>
+
+
+  <!--=====================================================================
+      End Microsoft Ccs 
+  ======================================================================-->
+</Project>
